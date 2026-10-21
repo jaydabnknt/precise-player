@@ -309,13 +309,23 @@ object MpvCore : MPVLib.EventObserver {
         val d = _state.value.duration
         val target = if (d > 0) t.coerceIn(0.0, d) else t.coerceAtLeast(0.0)
         synchronized(gate) {
+            requestedTarget = target
             pendingSteps = 0
             pendingSeek = SeekReq(target, exact)
             if (inFlight == Op.NONE) dispatchLocked()
         }
     }
 
-    fun seekBy(delta: Double, exact: Boolean = true) = seekTo(_position.value + delta, exact)
+    @Volatile private var requestedTarget = 0.0
+
+    /** Where the player is headed: the newest requested seek while one is running, else the position. */
+    fun lastTarget(): Double = if (busy) requestedTarget else _position.value
+
+    /**
+     * Relative seek that adds up correctly when repeated quickly
+     * (each press counts from the previous target, not from the not-yet-updated position).
+     */
+    fun seekRelative(delta: Double, exact: Boolean = true) = seekTo(lastTarget() + delta, exact)
 
     /** Step [n] frames (negative = backwards). Taps made while one step runs are added together. */
     fun step(n: Int) {
