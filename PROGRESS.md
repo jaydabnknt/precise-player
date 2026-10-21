@@ -4,7 +4,8 @@
 - [x] App code: core (MpvCore, Scrubber), player UI, home (recent + video library), settings
 - [x] Privacy policy, notices, licence, PLAY_STORE.md, store graphics (store/)
 - [x] Upload keystore generated and sent to the owner privately (NOT in repo). Owner adds 4 secrets.
-- [ ] App workflow green (build.yml) — iterating on compile errors
+- [x] App workflow green (build.yml) — first build compiled cleanly (build-3)
+- [ ] Emulator smoke test (smoke.yml + tools/smoke.sh) → results in release `smoke-test`
 - [ ] Owner tests on phone; fix feedback
 - [ ] Owner adds secrets, uploads AAB to Play Console (internal/closed testing)
 

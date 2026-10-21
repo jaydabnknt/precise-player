@@ -53,9 +53,21 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          ls -la smoke || true
-          [ -d smoke ] || exit 0
-          (cd smoke && zip -q ../smoke.zip *)
+          ls -la smoke || { echo "::error title=Smoke::no results folder"; exit 0; }
+          python3 - <<'PY'
+          import os
+          def ann(kind, title, path, limit=6000):
+              if not os.path.exists(path): return print(f"::warning title={title}::{path} missing")
+              t = open(path, errors='replace').read()[-limit:] or '(empty)'
+              t = t.replace('%', '%25').replace('\r', '').replace('\n', '%0A')
+              print(f"::{kind} title={title}::{t}")
+          ann('notice', 'Summary', 'smoke/summary.txt')
+          ann('notice', 'Install', 'smoke/install.txt', 1500)
+          ann('warning', 'Crashes', 'smoke/crashes.txt')
+          ann('notice', 'Log', 'smoke/logcat.txt', 9000)
+          PY
+          zip -q -j smoke.zip smoke/* || true
           gh release delete smoke-test -y --cleanup-tag -R "$GITHUB_REPOSITORY" || true
-          gh release create smoke-test smoke.zip smoke/*.png smoke/*.txt -R "$GITHUB_REPOSITORY" --prerelease \
-            --title "Smoke test results" --notes "Emulator run of the latest build. Not an app release." --target "$GITHUB_SHA"
+          files=$(ls smoke.zip smoke/*.png smoke/summary.txt smoke/crashes.txt smoke/logcat.txt 2>/dev/null)
+          gh release create smoke-test $files -R "$GITHUB_REPOSITORY" --prerelease \
+            --title "Smoke test results" --notes "Emulator run of the latest build. Not an app release." || echo "::warning::release upload failed"
