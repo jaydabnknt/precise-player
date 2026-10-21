@@ -7,5 +7,5 @@
     <path android:fillColor="#FFFFC145" android:strokeColor="#FFFFC145" android:strokeWidth="3"
         android:strokeLineJoin="round"
         android:pathData="M48,42 L66,54 L48,66 Z" />
-    <path android:fillColor="#FFFFC145" android:pathData="M53,80 h2 v5 h-2 z M46,81 h1.6 v3 h-1.6 z M61.4,81 h1.6 v3 h-1.6 z M39,81 h1.6 v3 h-1.6 z M68.4,81 h1.6 v3 h-1.6 z" />
+    <path android:fillColor="#FFFFC145" android:pathData="M53,79 h2 v4.5 h-2 z M47.2,80 h1.6 v2.5 h-1.6 z M59.2,80 h1.6 v2.5 h-1.6 z M41.4,80 h1.6 v2.5 h-1.6 z M65,80 h1.6 v2.5 h-1.6 z" />
 </vector>

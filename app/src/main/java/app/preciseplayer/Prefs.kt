@@ -84,7 +84,7 @@ object Prefs {
     val scrubMode = EnumPref("scrub_mode", ScrubMode.SMART, ScrubMode.values())
     /** Milliseconds of video per dp of horizontal swipe on the video. */
     val swipeSeekMsPerDp = IntPref("swipe_seek_ms_per_dp", 100)
-    val accurateFrameSteps = BoolPref("accurate_frame_steps", true)
+    val accurateFrameSteps = BoolPref("strict_frame_steps", false)
     val showMilliseconds = BoolPref("show_ms", true)
     val showFrameNumber = BoolPref("show_frame", true)
     val defaultFps = FloatPref("default_fps", 30f)

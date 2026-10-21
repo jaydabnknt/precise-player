@@ -125,7 +125,7 @@ fun SettingsScreen(onBack: () -> Unit) {
                 SliderItem("Swipe-to-seek speed", "${Prefs.swipeSeekMsPerDp.value * 100 / 1000} s per 100 dp of swipe",
                     Prefs.swipeSeekMsPerDp.value.toFloat(), 10f..500f) { Prefs.swipeSeekMsPerDp.value = (it / 10).roundToInt() * 10 }
             }
-            item { Toggle("Accurate frame stepping", "Never skip the target frame (slightly slower seeks). $engineNote", Prefs.accurateFrameSteps) }
+            item { Toggle("Strict frame stepping", "Turn on only if stepping skips frames (e.g. with deinterlacing). Makes seeking slower. $engineNote", Prefs.accurateFrameSteps) }
             item { Toggle("Show frame jog strip", "Drag sideways under the seek bar to step frame by frame", Prefs.showJog) }
             item { Toggle("Show milliseconds", null, Prefs.showMilliseconds) }
             item { Toggle("Show frame number", null, Prefs.showFrameNumber) }

@@ -175,8 +175,8 @@ object MpvCore : MPVLib.EventObserver {
         opt("hr-seek-framedrop", if (Prefs.accurateFrameSteps.value) "no" else "yes")
         opt("cache", "yes")
         opt("demuxer-seekable-cache", "yes")
-        opt("demuxer-max-bytes", "${96 * 1024 * 1024}")
-        opt("demuxer-max-back-bytes", "${96 * 1024 * 1024}")
+        opt("demuxer-max-bytes", "${64 * 1024 * 1024}")
+        opt("demuxer-max-back-bytes", "${64 * 1024 * 1024}")
         opt("demuxer-readahead-secs", "20")
 
         // We draw our own controls
