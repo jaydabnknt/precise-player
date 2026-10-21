@@ -13,6 +13,7 @@ import `is`.xyz.mpv.MPVLib.MpvFormat
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.update
+import kotlin.math.abs
 import java.io.File
 import java.util.Locale
 import java.util.concurrent.CountDownLatch
@@ -364,15 +365,18 @@ object MpvCore : MPVLib.EventObserver {
             steps != 0 -> {
                 pendingSteps = 0
                 inFlight = Op.STEP
+                val fps = _state.value.fps
+                val base = _position.value
+                stepPlayMode = steps == 1
+                stepSawUnpause = false
+                stepExpected = base + steps / fps
+                stepFrame = 1.0 / fps
                 post {
                     // stepping always leaves the video paused (a backwards step is a seek and
                     // would otherwise carry on playing if the video was running)
                     if (created) MPVLib.setPropertyBoolean("pause", true)
-                    when {
-                        steps == 1 -> cmd("frame-step")
-                        steps in 2..4 -> cmd("frame-step", steps.toString(), "play")
-                        else -> cmd("frame-step", steps.toString(), "seek")
-                    }
+                    if (steps == 1) cmd("frame-step", "1", "mute")      // decode just the next frame, silently
+                    else cmd("frame-step", steps.toString(), "seek")   // exact seek by N frames
                 }
                 handler.postDelayed({ opDone(token) }, 1500)
             }
@@ -384,6 +388,31 @@ object MpvCore : MPVLib.EventObserver {
                 }
             }
         }
+    }
+
+    @Volatile private var stepPlayMode = false
+    @Volatile private var stepSawUnpause = false
+    private var stepExpected = 0.0
+    private var stepFrame = 1.0 / 30
+
+    /** A one-frame step finished: if mpv overshot (it can when catching up with audio), land exactly. */
+    private fun finishPlayStep() {
+        val expected = stepExpected
+        val frame = stepFrame
+        handler.postDelayed({
+            val pos = _position.value
+            if (abs(pos - expected) > frame * 0.6) {
+                // correct the overshoot without dropping any taps queued meanwhile
+                synchronized(gate) {
+                    if (inFlight == Op.STEP) {
+                        requestedTarget = expected
+                        pendingSeek = SeekReq(expected, true)
+                        inFlight = Op.NONE
+                        dispatchLocked()
+                    }
+                }
+            } else opDone()
+        }, 40)
     }
 
     private fun opDone(token: Int? = null) {
@@ -453,7 +482,6 @@ object MpvCore : MPVLib.EventObserver {
         ).forEach { (name, fmt) -> MPVLib.observeProperty(name, fmt) }
     }
 
-    private var lastPosForStep = Double.NaN
 
     override fun eventProperty(property: String) {
         if (property == "track-list") post { readTracks() }
@@ -475,7 +503,14 @@ object MpvCore : MPVLib.EventObserver {
 
     override fun eventProperty(property: String, value: Boolean) {
         when (property) {
-            "pause" -> _state.update { it.copy(paused = value) }
+            "pause" -> {
+                _state.update { it.copy(paused = value) }
+                // a one-frame step unpauses, shows one frame, then pauses again
+                if (inFlight == Op.STEP && stepPlayMode) {
+                    if (!value) stepSawUnpause = true
+                    else if (stepSawUnpause) { stepPlayMode = false; finishPlayStep() }
+                }
+            }
             "paused-for-cache" -> _state.update { it.copy(buffering = value) }
             "eof-reached" -> _state.update { it.copy(eof = value) }
             "seekable" -> _state.update { it.copy(seekable = value) }
@@ -498,12 +533,6 @@ object MpvCore : MPVLib.EventObserver {
         when (property) {
             "time-pos" -> {
                 _position.value = value
-                // a "play"-mode frame step is done as soon as the next frame is shown
-                if (inFlight == Op.STEP && value != lastPosForStep) {
-                    lastPosForStep = value
-                    opDone()
-                }
-                lastPosForStep = value
             }
             "duration/full" -> _state.update { it.copy(duration = value) }
             "speed" -> _state.update { it.copy(speed = value) }

@@ -37,6 +37,11 @@ for i in 1 2 3 4 5; do adb shell input keyevent KEYCODE_PERIOD; done; sleep 2; s
 for i in 1 2 3; do adb shell input keyevent KEYCODE_COMMA; done; sleep 3; shot 06-after-3-frames-back
 # tap to show controls, then a drag along the seek bar area (bottom of screen)
 alive "after frame steps"
+# rapid taps: 10 back then 4 forward as fast as adb can send them (expect net -6 frames from shot 06)
+adb shell input keyevent KEYCODE_COMMA KEYCODE_COMMA KEYCODE_COMMA KEYCODE_COMMA KEYCODE_COMMA KEYCODE_COMMA KEYCODE_COMMA KEYCODE_COMMA KEYCODE_COMMA KEYCODE_COMMA
+adb shell input keyevent KEYCODE_PERIOD KEYCODE_PERIOD KEYCODE_PERIOD KEYCODE_PERIOD
+sleep 4; shot 06b-after-rapid-minus6
+alive "after rapid steps"
 adb shell input tap $((w/2)) $((h/3)); sleep 1; shot 07-controls
 adb shell input swipe $((w/2)) $((h/2)) $((w/2+300)) $((h/2)) 1500; sleep 2; shot 08-after-swipe-seek
 alive "after gestures"
