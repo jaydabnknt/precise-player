@@ -130,7 +130,7 @@ class PlayerUiState {
     var fill by mutableStateOf(false)
         private set
 
-    fun setFill(on: Boolean) {
+    fun changeFill(on: Boolean) {
         fill = on
         MpvCore.setDouble("panscan", if (on) 1.0 else 0.0)
         show(null, if (on) "Fill screen" else "Fit to screen")

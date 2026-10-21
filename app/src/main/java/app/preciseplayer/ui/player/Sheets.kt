@@ -268,7 +268,7 @@ private fun VideoSheet(s: PlayerState, ui: PlayerUiState) {
             Text("Fill screen", style = MaterialTheme.typography.bodyLarge)
             Text("Crops the edges instead of showing black bars", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
-        Switch(checked = ui.fill, onCheckedChange = { ui.setFill(it) })
+        Switch(checked = ui.fill, onCheckedChange = { ui.changeFill(it) })
     }
     HorizontalDivider(Modifier.padding(vertical = 8.dp))
     PictureSlider("Brightness", s.brightness, "brightness")

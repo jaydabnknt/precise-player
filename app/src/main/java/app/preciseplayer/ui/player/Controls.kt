@@ -130,7 +130,7 @@ fun runCtl(c: Ctl, ui: PlayerUiState, host: PlayerHost) {
             })
         }
         Ctl.VIDEO -> ui.sheet = Sheet.VIDEO
-        Ctl.FILL -> ui.setFill(!ui.fill)
+        Ctl.FILL -> ui.changeFill(!ui.fill)
         Ctl.ROTATE -> host.rotate()
         Ctl.LOCK -> ui.locked = true
         Ctl.PIP -> host.enterPip()
