@@ -64,7 +64,7 @@ object Format {
         return total
     }
 
-    fun frameAt(seconds: Double, fps: Double): Long = floor(seconds * fps + 1e-6).toLong()
+    fun frameAt(seconds: Double, fps: Double): Long = floor(seconds * fps + 0.01).toLong()
 
     fun size(bytes: Long): String = when {
         bytes >= 1L shl 30 -> String.format(Locale.US, "%.1f GB", bytes / (1L shl 30).toDouble())

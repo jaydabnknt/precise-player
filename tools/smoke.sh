@@ -15,6 +15,7 @@ adb shell mkdir -p /sdcard/Movies
 adb push test.mp4 /sdcard/Movies/test.mp4
 adb shell am broadcast -a android.intent.action.MEDIA_SCANNER_SCAN_FILE -d file:///sdcard/Movies/test.mp4 >/dev/null
 adb shell pm grant $PKG android.permission.READ_MEDIA_VIDEO || true
+adb shell settings put secure immersive_mode_confirmations confirmed
 adb logcat -c
 
 # 1. home screen

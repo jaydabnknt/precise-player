@@ -329,13 +329,8 @@ private fun TimeReadout(s: PlayerState, ui: PlayerUiState) {
 @Composable
 private fun FrameReadout(s: PlayerState, ui: PlayerUiState) {
     if (!Prefs.showFrameNumber.value || !s.hasVideo) return
-    val frame by MpvCore.frame.collectAsState()
-    val target = ui.scrubTarget
-    val n = when {
-        target != null -> Format.frameAt(target, s.fps)
-        frame >= 0 -> frame
-        else -> Format.frameAt(MpvCore.position.value, s.fps)
-    }
+    val pos by MpvCore.position.collectAsState()
+    val n = Format.frameAt(ui.scrubTarget ?: pos, s.fps)
     Text(
         "F $n · " + Format.fps(s.fps) + if (s.fpsKnown) "" else " (assumed)",
         color = Color.White.copy(alpha = 0.75f), style = TimeStyle,

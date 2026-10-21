@@ -239,11 +239,29 @@ class PlayerActivity : ComponentActivity(), PlayerHost {
 
     // ---------------------------------------------------------------- keys
 
-    override fun onKeyDown(keyCode: Int, event: KeyEvent): Boolean {
+    // Handle keys before the Compose view hierarchy can swallow them (e.g. as focus navigation)
+    override fun dispatchKeyEvent(event: KeyEvent): Boolean {
+        val volumeKey = event.keyCode == KeyEvent.KEYCODE_VOLUME_UP || event.keyCode == KeyEvent.KEYCODE_VOLUME_DOWN
+        if (ui.sheet == null && !ui.goToOpen && event.keyCode in playerKeys) {
+            if (volumeKey && !Prefs.volumeKeysControlPlayer.value) return super.dispatchKeyEvent(event)
+            if (event.action == KeyEvent.ACTION_DOWN) return handleKey(event.keyCode, event) || super.dispatchKeyEvent(event)
+            return true
+        }
+        return super.dispatchKeyEvent(event)
+    }
+
+    private val playerKeys = setOf(
+        KeyEvent.KEYCODE_VOLUME_UP, KeyEvent.KEYCODE_VOLUME_DOWN, KeyEvent.KEYCODE_SPACE, KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE,
+        KeyEvent.KEYCODE_HEADSETHOOK, KeyEvent.KEYCODE_DPAD_CENTER, KeyEvent.KEYCODE_MEDIA_PLAY, KeyEvent.KEYCODE_MEDIA_PAUSE,
+        KeyEvent.KEYCODE_DPAD_LEFT, KeyEvent.KEYCODE_MEDIA_REWIND, KeyEvent.KEYCODE_DPAD_RIGHT, KeyEvent.KEYCODE_MEDIA_FAST_FORWARD,
+        KeyEvent.KEYCODE_COMMA, KeyEvent.KEYCODE_PERIOD,
+    )
+
+    private fun handleKey(keyCode: Int, event: KeyEvent): Boolean {
         val s = MpvCore.state.value
         when (keyCode) {
             KeyEvent.KEYCODE_VOLUME_UP, KeyEvent.KEYCODE_VOLUME_DOWN -> {
-                if (!Prefs.volumeKeysControlPlayer.value) return super.onKeyDown(keyCode, event)
+                if (!Prefs.volumeKeysControlPlayer.value) return false
                 val step = Prefs.volumeStep.value.toDouble()
                 val v = (s.volume + if (keyCode == KeyEvent.KEYCODE_VOLUME_UP) step else -step).coerceIn(0.0, s.volumeMax)
                 MpvCore.setVolume(v)
@@ -270,7 +288,7 @@ class PlayerActivity : ComponentActivity(), PlayerHost {
             KeyEvent.KEYCODE_COMMA -> { MpvCore.step(-1); return true }
             KeyEvent.KEYCODE_PERIOD -> { MpvCore.step(1); return true }
         }
-        return super.onKeyDown(keyCode, event)
+        return false
     }
 
     // ---------------------------------------------------------------- picture-in-picture
