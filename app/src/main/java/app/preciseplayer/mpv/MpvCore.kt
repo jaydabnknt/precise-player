@@ -278,6 +278,7 @@ object MpvCore : MPVLib.EventObserver {
     fun setPaused(p: Boolean) = setBool("pause", p)
     fun togglePause() = post {
         if (!created) return@post
+        Log.d(TAG, "togglePause (paused=${_state.value.paused})")
         val s = _state.value
         if (s.eof && s.paused) { cmd("seek", "0", "absolute+exact"); MPVLib.setPropertyBoolean("pause", false) }
         else cmd("cycle", "pause")
@@ -366,17 +367,24 @@ object MpvCore : MPVLib.EventObserver {
                 pendingSteps = 0
                 inFlight = Op.STEP
                 val fps = _state.value.fps
-                val base = _position.value
                 stepPlayMode = steps == 1
-                stepSawUnpause = false
-                stepExpected = base + steps / fps
+                stepArmed = false
                 stepFrame = 1.0 / fps
                 post {
+                    if (!created) return@post
                     // stepping always leaves the video paused (a backwards step is a seek and
                     // would otherwise carry on playing if the video was running)
-                    if (created) MPVLib.setPropertyBoolean("pause", true)
-                    if (steps == 1) cmd("frame-step", "1", "mute")      // decode just the next frame, silently
-                    else cmd("frame-step", steps.toString(), "seek")   // exact seek by N frames
+                    MPVLib.setPropertyBoolean("pause", true)
+                    if (steps == 1) {
+                        val base = MPVLib.getPropertyDouble("time-pos") ?: _position.value
+                        stepBase = base
+                        stepExpected = base + stepFrame
+                        cmd("frame-step", "1", "mute")      // decode just the next frame, silently
+                        stepArmed = true
+                    } else {
+                        cmd("frame-step", steps.toString(), "seek")   // exact seek by N frames
+                    }
+                    Log.d(TAG, "step $steps")
                 }
                 handler.postDelayed({ opDone(token) }, 1500)
             }
@@ -391,9 +399,10 @@ object MpvCore : MPVLib.EventObserver {
     }
 
     @Volatile private var stepPlayMode = false
-    @Volatile private var stepSawUnpause = false
-    private var stepExpected = 0.0
-    private var stepFrame = 1.0 / 30
+    @Volatile private var stepArmed = false
+    @Volatile private var stepBase = 0.0
+    @Volatile private var stepExpected = 0.0
+    @Volatile private var stepFrame = 1.0 / 30
 
     /** A one-frame step finished: if mpv overshot (it can when catching up with audio), land exactly. */
     private fun finishPlayStep() {
@@ -505,11 +514,6 @@ object MpvCore : MPVLib.EventObserver {
         when (property) {
             "pause" -> {
                 _state.update { it.copy(paused = value) }
-                // a one-frame step unpauses, shows one frame, then pauses again
-                if (inFlight == Op.STEP && stepPlayMode) {
-                    if (!value) stepSawUnpause = true
-                    else if (stepSawUnpause) { stepPlayMode = false; finishPlayStep() }
-                }
             }
             "paused-for-cache" -> _state.update { it.copy(buffering = value) }
             "eof-reached" -> _state.update { it.copy(eof = value) }
@@ -533,6 +537,11 @@ object MpvCore : MPVLib.EventObserver {
         when (property) {
             "time-pos" -> {
                 _position.value = value
+                // a one-frame step is done once the next frame (a later time-pos) is shown
+                if (inFlight == Op.STEP && stepPlayMode && stepArmed && value > stepBase + stepFrame * 0.25) {
+                    stepPlayMode = false
+                    finishPlayStep()
+                }
             }
             "duration/full" -> _state.update { it.copy(duration = value) }
             "speed" -> _state.update { it.copy(speed = value) }

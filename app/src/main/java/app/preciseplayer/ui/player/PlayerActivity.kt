@@ -244,7 +244,10 @@ class PlayerActivity : ComponentActivity(), PlayerHost {
         val volumeKey = event.keyCode == KeyEvent.KEYCODE_VOLUME_UP || event.keyCode == KeyEvent.KEYCODE_VOLUME_DOWN
         if (ui.sheet == null && !ui.goToOpen && event.keyCode in playerKeys) {
             if (volumeKey && !Prefs.volumeKeysControlPlayer.value) return super.dispatchKeyEvent(event)
-            if (event.action == KeyEvent.ACTION_DOWN) return handleKey(event.keyCode, event) || super.dispatchKeyEvent(event)
+            if (event.action == KeyEvent.ACTION_DOWN) {
+                android.util.Log.d("PrecisePlayer", "key ${event.keyCode} repeat=${event.repeatCount}")
+                return handleKey(event.keyCode, event) || super.dispatchKeyEvent(event)
+            }
             return true
         }
         return super.dispatchKeyEvent(event)
