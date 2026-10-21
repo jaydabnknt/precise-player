@@ -47,6 +47,7 @@ jobs:
           target: google_apis
           arch: x86_64
           disable-animations: true
+          profile: pixel_6
           emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim
           script: bash tools/smoke.sh
 
@@ -59,6 +60,7 @@ jobs:
           target: google_apis
           arch: x86_64
           disable-animations: true
+          profile: pixel_6
           emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim
           script: bash tools/smoke.sh
 
@@ -84,4 +86,4 @@ jobs:
           gh release delete smoke-test -y --cleanup-tag -R "$GITHUB_REPOSITORY" || true
           files=$(ls smoke.zip smoke/*.png smoke/summary.txt smoke/crashes.txt smoke/logcat.txt 2>/dev/null)
           gh release create smoke-test $files -R "$GITHUB_REPOSITORY" --prerelease \
-            --title "Smoke test results" --notes "Emulator run of the latest build. Not an app release." || echo "::warning::release upload failed"
+            --title "Smoke test results" --notes "Emulator run of the latest build. Not an app release." > gh.log 2>&1 || echo "::warning title=Upload::$(tail -c 800 gh.log | tr '\n' ' ')"
