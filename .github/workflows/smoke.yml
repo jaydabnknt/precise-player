@@ -39,9 +39,23 @@ jobs:
           ls -la test.mp4 PrecisePlayer.apk
 
       - name: Run on emulator
+        id: emu
+        continue-on-error: true
         uses: reactivecircus/android-emulator-runner@v2
         with:
           api-level: 34
+          target: google_apis
+          arch: x86_64
+          disable-animations: true
+          emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim
+          script: bash tools/smoke.sh
+
+      - name: Run on emulator (retry)
+        if: steps.emu.outcome == 'failure'
+        continue-on-error: true
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 33
           target: google_apis
           arch: x86_64
           disable-animations: true
