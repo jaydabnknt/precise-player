@@ -1,0 +1,84 @@
+# Builds the playback engine (libmpv + FFmpeg + libass + JNI glue) for arm64 phones,
+# using the official mpv-android build scripts, and publishes it as a release asset
+# that the app build downloads. Only needs to run again to update the engine.
+name: Build engine
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths: [".github/workflows/native.yml"]
+
+permissions:
+  contents: write
+
+env:
+  # mpv-android commit whose build scripts (and JNI glue) are used
+  MPV_ANDROID_REF: 62013d44a6d30c26649a07c703c7626e9dd2ea99
+  ENGINE_TAG: engine-v1
+
+jobs:
+  engine:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 150
+    steps:
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Get mpv-android build scripts
+        run: |
+          git init up
+          git -C up remote add origin https://github.com/mpv-android/mpv-android
+          git -C up fetch --depth 1 origin "$MPV_ANDROID_REF"
+          git -C up checkout FETCH_HEAD
+          # 64-bit ARM only (every phone from the last ~8 years)
+          sed -i 's/^v_ci_archs=.*/v_ci_archs="arm64"/' up/buildscripts/include/ci.sh
+          up/buildscripts/include/ci.sh export >> "$GITHUB_ENV"
+
+      - uses: actions/cache@v4
+        with:
+          path: gh-cache/
+          key: "${{ env.CACHE_IDENTIFIER }}-arm64"
+
+      - name: Install packages
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y autoconf pkgconf libtool ninja-build python3-pip gperf nasm
+          sudo pip3 install --break-system-packages meson || sudo pip3 install meson
+
+      - name: Download or build dependencies
+        run: |
+          mkdir -p "$CACHE_FOLDER"
+          up/buildscripts/include/ci.sh install
+        env:
+          CACHE_MODE: folder
+          CACHE_FOLDER: "${{ github.workspace }}/gh-cache"
+
+      - name: Build mpv and the JNI library
+        run: |
+          cd up/buildscripts
+          ./buildall.sh -n mpv --arch arm64
+          ndk=$(echo "$PWD"/sdk/android-ndk-*)
+          PREFIX64="$PWD/prefix/arm64" "$ndk/ndk-build" -C ../app/src/main -j"$(nproc)"
+          ls -la ../app/src/main/libs/arm64-v8a
+
+      - name: Package
+        run: |
+          mkdir -p engine/jniLibs/arm64-v8a engine/assets
+          cp up/app/src/main/libs/arm64-v8a/*.so engine/jniLibs/arm64-v8a/
+          cp up/app/src/main/assets/cacert.pem engine/assets/
+          git -C up/buildscripts/deps/mpv log -1 --format='%H %cs' > engine/mpv-version.txt 2>/dev/null || true
+          strings engine/jniLibs/arm64-v8a/libmpv.so | grep -m1 -E '^mpv v?[0-9]' >> engine/mpv-version.txt || true
+          cat engine/mpv-version.txt
+          (cd engine && zip -r ../engine.zip .)
+
+      - name: Publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release delete "$ENGINE_TAG" -y --cleanup-tag -R "$GITHUB_REPOSITORY" || true
+          gh release create "$ENGINE_TAG" engine.zip -R "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --prerelease \
+            --title "Playback engine ($ENGINE_TAG)" \
+            --notes "libmpv + FFmpeg built from mpv-android $MPV_ANDROID_REF. Used by the app build; not an app itself. $(cat engine/mpv-version.txt | tr '\n' ' ')"
