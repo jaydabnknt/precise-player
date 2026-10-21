@@ -84,6 +84,6 @@ jobs:
           PY
           zip -q -j smoke.zip smoke/* || true
           gh release delete smoke-test -y --cleanup-tag -R "$GITHUB_REPOSITORY" || true
-          files=$(ls smoke.zip smoke/*.png smoke/summary.txt smoke/crashes.txt smoke/logcat.txt 2>/dev/null)
+          files=$(find smoke.zip smoke -maxdepth 1 -type f -size +0 \( -name '*.png' -o -name summary.txt -o -name crashes.txt -o -name logcat.txt -o -name smoke.zip \))
           gh release create smoke-test $files -R "$GITHUB_REPOSITORY" --prerelease \
             --title "Smoke test results" --notes "Emulator run of the latest build. Not an app release." > gh.log 2>&1 || echo "::warning title=Upload::$(tail -c 800 gh.log | tr '\n' ' ')"
