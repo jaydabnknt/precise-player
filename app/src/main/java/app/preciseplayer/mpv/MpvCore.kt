@@ -190,6 +190,11 @@ object MpvCore : MPVLib.EventObserver {
         opt("volume-max", Prefs.volumeMax.value.toString())
         if (Prefs.rememberVolume.value) opt("volume", Prefs.lastVolume.value.toString())
 
+        // Subtitles and speed from settings
+        opt("sub-scale", Prefs.subScale.value.toString())
+        opt("sub-pos", Prefs.subPos.value.toString())
+        if (Prefs.rememberSpeed.value) opt("speed", Prefs.lastSpeed.value.toString())
+
         // Resume where you left off
         opt("watch-later-directory", watchLater.path)
         opt("resume-playback", if (Prefs.resume.value) "yes" else "no")
@@ -360,6 +365,9 @@ object MpvCore : MPVLib.EventObserver {
                 pendingSteps = 0
                 inFlight = Op.STEP
                 post {
+                    // stepping always leaves the video paused (a backwards step is a seek and
+                    // would otherwise carry on playing if the video was running)
+                    if (created) MPVLib.setPropertyBoolean("pause", true)
                     when {
                         steps == 1 -> cmd("frame-step")
                         steps in 2..4 -> cmd("frame-step", steps.toString(), "play")

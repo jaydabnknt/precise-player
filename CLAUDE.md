@@ -27,3 +27,11 @@ as a modern, ad-free, Play-Store-ready app. Owner builds only through GitHub Act
 
 ## Status / next steps
 See PROGRESS.md (kept up to date after every step).
+
+## Customization (owner request, 21 Oct)
+- Buttons are an enum `Ctl` (Prefs.kt); three slots TOP/CENTER/BOTTOM stored as comma lists
+  (`Prefs.topButtons` etc.). Rendering/actions in `ui/player/Controls.kt` (`CtlButton`, `runCtl`).
+  Editor: `ui/settings/ControlsEditor.kt`. The ⋮ More menu is always present.
+- Frame-step row: own toggle + size (AUTO = large in portrait). While the jog strip is dragged,
+  everything else fades out (`ui.jogging`).
+- Every frame step forces pause first (backward steps are seeks and kept playing otherwise).

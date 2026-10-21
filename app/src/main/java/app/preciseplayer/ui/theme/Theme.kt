@@ -42,11 +42,25 @@ private val Scheme = darkColorScheme(
     outlineVariant = Color(0xFF3A3B41),
 )
 
+/** Accent colours the user can pick in Settings. */
+val Accents = listOf(
+    "Amber" to Color(0xFFFFC145),
+    "Teal" to Color(0xFF4FD8C4),
+    "Sky" to Color(0xFF7CC4FF),
+    "Violet" to Color(0xFFB69CFF),
+    "Rose" to Color(0xFFFF8FB1),
+    "Lime" to Color(0xFFB5E36B),
+    "Coral" to Color(0xFFFF8A65),
+    "White" to Color(0xFFECECEF),
+)
+
 @Composable
 fun PreciseTheme(content: @Composable () -> Unit) {
     val scheme = if (Prefs.dynamicColor.value && Build.VERSION.SDK_INT >= 31)
         dynamicDarkColorScheme(LocalContext.current).copy(background = Ink, surface = Ink)
-    else Scheme
+    else Accents.getOrNull(Prefs.accent.value)?.second?.let { a ->
+        Scheme.copy(primary = a, onPrimary = Color(0xFF1A1A1A), primaryContainer = a.copy(alpha = 0.28f).compositeOverInk(), onPrimaryContainer = a)
+    } ?: Scheme
     val base = Typography()
     MaterialTheme(
         colorScheme = scheme,
@@ -61,3 +75,8 @@ fun PreciseTheme(content: @Composable () -> Unit) {
 /** Digits that don't jitter as they change (tabular figures). */
 val Tabular = TextStyle(fontFeatureSettings = "tnum")
 val TimeStyle = TextStyle(fontFeatureSettings = "tnum", fontSize = 13.sp, fontWeight = FontWeight.Medium)
+
+private fun Color.compositeOverInk(): Color {
+    val a = alpha
+    return Color(red * a + Ink.red * (1 - a), green * a + Ink.green * (1 - a), blue * a + Ink.blue * (1 - a), 1f)
+}

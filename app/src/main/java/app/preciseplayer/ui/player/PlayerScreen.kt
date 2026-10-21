@@ -108,6 +108,7 @@ interface PlayerHost {
     fun rotate()
     fun screenshot()
     fun openSettings()
+    fun customizeControls()
     fun pickSubtitle()
     fun getBrightness(): Float
     fun setBrightness(v: Float)
@@ -124,6 +125,16 @@ class PlayerUiState {
     var scrubSource by mutableStateOf(ScrubSource.BAR)
     var scrubFine by mutableStateOf(1f)
     var inPip by mutableStateOf(false)
+    /** True while the jog strip is being dragged: everything else is hidden. */
+    var jogging by mutableStateOf(false)
+    var fill by mutableStateOf(false)
+        private set
+
+    fun setFill(on: Boolean) {
+        fill = on
+        MpvCore.setDouble("panscan", if (on) 1.0 else 0.0)
+        show(null, if (on) "Fill screen" else "Fit to screen")
+    }
     var interaction by mutableLongStateOf(0L)
     private var feedbackId = 0L
 
@@ -154,9 +165,10 @@ fun PlayerScreen(ui: PlayerUiState, host: PlayerHost) {
     val density = LocalDensity.current
 
     // auto-hide the controls a few seconds after the last interaction while playing
-    LaunchedEffect(ui.controlsVisible, ui.interaction, s.paused, ui.sheet, ui.scrubTarget) {
-        if (ui.controlsVisible && !s.paused && ui.sheet == null && ui.scrubTarget == null && !ui.goToOpen) {
-            delay(3500)
+    LaunchedEffect(ui.controlsVisible, ui.interaction, s.paused, ui.sheet, ui.scrubTarget, ui.jogging) {
+        val hide = Prefs.hideDelayMs.value
+        if (hide > 0 && ui.controlsVisible && !s.paused && ui.sheet == null && ui.scrubTarget == null && !ui.goToOpen && !ui.jogging) {
+            delay(hide.toLong())
             ui.controlsVisible = false
         }
     }
@@ -193,7 +205,7 @@ fun PlayerScreen(ui: PlayerUiState, host: PlayerHost) {
                 ) { Icon(Icons.Rounded.LockOpen, "Unlock") }
             }
 
-            ScrubOverlay(s, ui, Modifier.align(Alignment.Center))
+            if (Prefs.showScrubOverlay.value) ScrubOverlay(s, ui, Modifier.align(Alignment.Center))
             if (ui.scrubTarget == null) FeedbackPill(ui.feedback, Modifier.align(Alignment.TopCenter).padding(top = 56.dp))
 
             Sheets(s, ui, host)
@@ -226,10 +238,12 @@ private class PlayerGestures(
         if (ui.locked) return
         val st = MpvCore.state.value
         if (zone == 0) {
+            if (!Prefs.gestureDoubleTapPause.value) { onTap(); return }
             MpvCore.togglePause()
             ui.show(if (st.paused) Icons.Rounded.PlayArrow else Icons.Rounded.Pause, if (st.paused) "Play" else "Pause")
             return
         }
+        if (!Prefs.gestureDoubleTapSeek.value) { onTap(); return }
         val amount = Prefs.doubleTapSeek.value
         val secs = amount.seconds(st.fps) * zone
         tapSeekAccum = if (repeat) tapSeekAccum + secs else secs
@@ -242,7 +256,7 @@ private class PlayerGestures(
     }
 
     override fun onLongPressStart() {
-        if (ui.locked) return
+        if (ui.locked || !Prefs.gestureLongPress.value) return
         val st = MpvCore.state.value
         if (st.paused) return
         speedBefore = st.speed
@@ -258,7 +272,13 @@ private class PlayerGestures(
         ui.feedback = null
     }
 
-    override fun swipesEnabled() = !ui.locked && Prefs.swipeGestures.value
+    override fun dragAllowed(kind: DragKind) = !ui.locked && when (kind) {
+        DragKind.SEEK -> Prefs.gestureSeek.value
+        DragKind.VOLUME -> Prefs.gestureVolume.value
+        DragKind.BRIGHTNESS -> Prefs.gestureBrightness.value
+    }
+
+    override fun pinchAllowed() = !ui.locked && Prefs.gesturePinch.value
 
     override fun onDragStart(kind: DragKind) {
         val st = MpvCore.state.value
@@ -330,141 +350,6 @@ private class PlayerGestures(
         MpvCore.setDouble("video-pan-x", 0.0)
         MpvCore.setDouble("video-pan-y", 0.0)
     }
-}
-
-@Composable
-private fun Controls(s: PlayerState, ui: PlayerUiState, host: PlayerHost, scrubber: Scrubber, onResetZoom: () -> Unit) {
-    val white = Color.White
-    Box(Modifier.fillMaxSize()) {
-        Box(Modifier.align(Alignment.TopCenter).fillMaxWidth().height(140.dp)
-            .background(Brush.verticalGradient(listOf(Color.Black.copy(alpha = 0.72f), Color.Transparent))))
-        Box(Modifier.align(Alignment.BottomCenter).fillMaxWidth().height(220.dp)
-            .background(Brush.verticalGradient(listOf(Color.Transparent, Color.Black.copy(alpha = 0.82f)))))
-
-        // top bar
-        Row(
-            Modifier.align(Alignment.TopCenter).fillMaxWidth()
-                .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Top + WindowInsetsSides.Horizontal))
-                .padding(horizontal = 4.dp, vertical = 4.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            IconButton(onClick = host::back) { Icon(Icons.AutoMirrored.Rounded.ArrowBack, "Back", tint = white) }
-            Text(
-                s.title, color = white, style = MaterialTheme.typography.titleMedium,
-                maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f).padding(horizontal = 4.dp),
-            )
-            val subsOn = s.tracks.any { it.type == "sub" && it.selected }
-            IconButton(onClick = { ui.sheet = Sheet.AUDIO }) { Icon(Icons.Rounded.Audiotrack, "Audio track", tint = white) }
-            IconButton(onClick = { ui.sheet = Sheet.SUBS }) {
-                Icon(Icons.Rounded.ClosedCaption, "Subtitles", tint = if (subsOn) MaterialTheme.colorScheme.primary else white)
-            }
-            TextButton(onClick = { ui.sheet = Sheet.SPEED }) {
-                Text(Format.speed(s.speed), color = if (s.speed != 1.0) MaterialTheme.colorScheme.primary else white, style = Tabular)
-            }
-            IconButton(onClick = { ui.sheet = Sheet.MORE }) { Icon(Icons.Rounded.MoreVert, "More", tint = white) }
-        }
-
-        // centre
-        Row(
-            Modifier.align(Alignment.Center),
-            horizontalArrangement = Arrangement.spacedBy(28.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            val amount = Prefs.buttonSeek.value
-            CircleIconButton(Icons.Rounded.FastRewind, "Back ${amount.label()}") {
-                MpvCore.seekRelative(-amount.seconds(s.fps)); ui.poke()
-            }
-            FilledIconButton(
-                onClick = { MpvCore.togglePause(); ui.poke() },
-                modifier = Modifier.size(72.dp),
-                colors = IconButtonDefaults.filledIconButtonColors(containerColor = Color.White.copy(alpha = 0.16f), contentColor = white),
-            ) {
-                Icon(
-                    when { s.eof && s.paused -> Icons.Rounded.Replay; s.paused -> Icons.Rounded.PlayArrow; else -> Icons.Rounded.Pause },
-                    if (s.paused) "Play" else "Pause", Modifier.size(40.dp),
-                )
-            }
-            CircleIconButton(Icons.Rounded.FastForward, "Forward ${amount.label()}") {
-                MpvCore.seekRelative(amount.seconds(s.fps)); ui.poke()
-            }
-        }
-
-        // bottom
-        Column(
-            Modifier.align(Alignment.BottomCenter).fillMaxWidth()
-                .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Bottom + WindowInsetsSides.Horizontal))
-                .padding(horizontal = 12.dp).padding(bottom = 6.dp),
-        ) {
-            Row(Modifier.fillMaxWidth().padding(horizontal = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-                TimeReadout(s, ui)
-                Spacer(Modifier.weight(1f))
-                FrameReadout(s, ui)
-            }
-            PreciseSeekBar(s.duration, s.abLoopA, s.abLoopB, s.cacheSeconds, ui, scrubber)
-            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                RepeatButton({ MpvCore.step(-1); ui.poke() }) {
-                    Icon(Icons.Rounded.ChevronLeft, "Previous frame", tint = white, modifier = Modifier.size(30.dp))
-                }
-                if (Prefs.showJog.value) {
-                    JogStrip(
-                        onSteps = { MpvCore.step(it) }, onInteract = ui::poke,
-                        modifier = Modifier.weight(1f).padding(horizontal = 4.dp),
-                    )
-                } else Spacer(Modifier.weight(1f))
-                RepeatButton({ MpvCore.step(1); ui.poke() }) {
-                    Icon(Icons.Rounded.ChevronRight, "Next frame", tint = white, modifier = Modifier.size(30.dp))
-                }
-                Spacer(Modifier.width(4.dp))
-                if (s.zoom != 0.0) {
-                    IconButton(onClick = { onResetZoom(); ui.poke() }) { Icon(Icons.Rounded.ZoomOutMap, "Reset zoom", tint = MaterialTheme.colorScheme.primary) }
-                }
-                TextButton(onClick = { ui.sheet = Sheet.VOLUME }) {
-                    Icon(if (s.mute || s.volume == 0.0) Icons.AutoMirrored.Rounded.VolumeOff else Icons.AutoMirrored.Rounded.VolumeUp, null,
-                        tint = if (s.volume > 100) MaterialTheme.colorScheme.primary else white, modifier = Modifier.size(20.dp))
-                    Spacer(Modifier.width(4.dp))
-                    Text(Format.percent(s.volume), color = white, style = Tabular)
-                }
-                IconButton(onClick = host::rotate) { Icon(Icons.Rounded.ScreenRotation, "Rotate", tint = white) }
-                IconButton(onClick = { ui.locked = true; ui.poke() }) { Icon(Icons.Rounded.Lock, "Lock controls", tint = white) }
-            }
-        }
-    }
-}
-
-@Composable
-private fun CircleIconButton(icon: ImageVector, desc: String, onClick: () -> Unit) {
-    FilledIconButton(
-        onClick = onClick, modifier = Modifier.size(52.dp),
-        colors = IconButtonDefaults.filledIconButtonColors(containerColor = Color.White.copy(alpha = 0.10f), contentColor = Color.White),
-    ) { Icon(icon, desc, Modifier.size(28.dp)) }
-}
-
-@Composable
-private fun TimeReadout(s: PlayerState, ui: PlayerUiState) {
-    val pos by MpvCore.position.collectAsState()
-    val shown = ui.scrubTarget ?: pos
-    val ms = Prefs.showMilliseconds.value
-    val hours = s.duration >= 3600
-    Text(
-        Format.time(shown, ms, hours) + "  /  " + Format.time(s.duration, ms, hours),
-        color = Color.White, style = TimeStyle,
-    )
-}
-
-@Composable
-private fun FrameReadout(s: PlayerState, ui: PlayerUiState) {
-    if (!Prefs.showFrameNumber.value || !s.hasVideo) return
-    val frame by MpvCore.frame.collectAsState()
-    val target = ui.scrubTarget
-    val n = when {
-        target != null -> Format.frameAt(target, s.fps)
-        frame >= 0 -> frame
-        else -> Format.frameAt(MpvCore.position.value, s.fps)
-    }
-    Text(
-        "F $n · " + Format.fps(s.fps) + if (s.fpsKnown) "" else " (assumed)",
-        color = Color.White.copy(alpha = 0.75f), style = TimeStyle,
-    )
 }
 
 @Composable

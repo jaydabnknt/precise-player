@@ -14,6 +14,34 @@ enum class ScrubMode { SMART, EXACT, KEYFRAMES }
 
 enum class OrientationMode { AUTO, SENSOR, LANDSCAPE, PORTRAIT }
 
+enum class FrameRowSize { AUTO, NORMAL, LARGE }
+
+/** Every button that can be placed in the player's top bar, centre or bottom bar. */
+enum class Ctl(val label: String) {
+    PLAY_PAUSE("Play / pause"),
+    SEEK_BACK("Rewind"),
+    SEEK_FWD("Fast-forward"),
+    FRAME_BACK("Previous frame"),
+    FRAME_FWD("Next frame"),
+    SAVE_FRAME("Save frame"),
+    AUDIO("Audio track"),
+    SUBS("Subtitles"),
+    SPEED("Playback speed"),
+    VOLUME("Volume"),
+    MUTE("Mute"),
+    GO_TO("Go to time / frame"),
+    AB_LOOP("A-B loop"),
+    VIDEO("Video & picture"),
+    FILL("Fit / fill screen"),
+    ROTATE("Rotate screen"),
+    LOCK("Lock controls"),
+    PIP("Picture-in-picture"),
+    STATS("Statistics"),
+    SETTINGS("Settings");
+}
+
+enum class Slot(val label: String) { TOP("Top bar"), CENTER("Centre"), BOTTOM("Bottom bar") }
+
 /** An amount of time to jump, either in milliseconds or in video frames. */
 data class SeekAmount(val value: Int, val frames: Boolean) {
     fun seconds(fps: Double): Double = if (frames) value / fps.coerceAtLeast(1.0) else value / 1000.0
@@ -73,6 +101,13 @@ object Prefs {
         override fun write(v: E) = sp.edit { putString(key, v.name) }
     }
 
+    class CtlListPref(key: String, default: List<Ctl>) : Pref<List<Ctl>>(key, default) {
+        override fun read(): List<Ctl> = sp.getString(key, null)?.let { str ->
+            str.split(',').mapNotNull { n -> Ctl.values().firstOrNull { it.name == n } }
+        } ?: default
+        override fun write(v: List<Ctl>) = sp.edit { putString(key, v.joinToString(",") { it.name }) }
+    }
+
     class AmountPref(key: String, default: SeekAmount) : Pref<SeekAmount>(key, default) {
         override fun read() = SeekAmount(sp.getInt("$key.v", default.value), sp.getBoolean("$key.f", default.frames))
         override fun write(v: SeekAmount) = sp.edit { putInt("$key.v", v.value); putBoolean("$key.f", v.frames) }
@@ -90,12 +125,45 @@ object Prefs {
     val defaultFps = FloatPref("default_fps", 30f)
     val showJog = BoolPref("show_jog", true)
 
+    val frameStepCount = IntPref("frame_step_count", 1)
+    val jogTickDp = IntPref("jog_tick_dp", 12)
+    val fineScrub = BoolPref("fine_scrub", true)
+    val showScrubOverlay = BoolPref("scrub_overlay", true)
+
+    // Controls layout
+    val topButtons = CtlListPref("ctl_top", listOf(Ctl.AUDIO, Ctl.SUBS, Ctl.SPEED))
+    val centerButtons = CtlListPref("ctl_center", listOf(Ctl.SEEK_BACK, Ctl.PLAY_PAUSE, Ctl.SEEK_FWD))
+    val bottomButtons = CtlListPref("ctl_bottom", listOf(Ctl.SAVE_FRAME, Ctl.VOLUME, Ctl.ROTATE, Ctl.LOCK))
+    val showFrameRow = BoolPref("frame_row", true)
+    val frameRowSize = EnumPref("frame_row_size", FrameRowSize.AUTO, FrameRowSize.values())
+    val hideDelayMs = IntPref("hide_delay_ms", 3500)
+    val controlsDim = FloatPref("controls_dim", 0.8f)
+    val largeSeekBar = BoolPref("large_seekbar", false)
+    val showRemaining = BoolPref("show_remaining", false)
+    val showTitle = BoolPref("show_title", true)
+
+    fun buttons(slot: Slot) = when (slot) { Slot.TOP -> topButtons; Slot.CENTER -> centerButtons; Slot.BOTTOM -> bottomButtons }
+
+    // Gestures
+    val gestureSeek = BoolPref("g_seek", true)
+    val gestureVolume = BoolPref("g_volume", true)
+    val gestureBrightness = BoolPref("g_brightness", true)
+    val gestureDoubleTapSeek = BoolPref("g_dtap_seek", true)
+    val gestureDoubleTapPause = BoolPref("g_dtap_pause", true)
+    val gesturePinch = BoolPref("g_pinch", true)
+    val gestureLongPress = BoolPref("g_long_press", true)
+
+    // Subtitles
+    val subScale = FloatPref("sub_scale", 1f)
+    val subPos = IntPref("sub_pos", 100)
+
     // Playback
+    val rememberSpeed = BoolPref("remember_speed", false)
+    val lastSpeed = FloatPref("last_speed", 1f)
     val resume = BoolPref("resume", true)
     val autoPip = BoolPref("auto_pip", true)
     val orientation = EnumPref("orientation", OrientationMode.AUTO, OrientationMode.values())
     val longPressSpeed = FloatPref("long_press_speed", 2f)
-    val swipeGestures = BoolPref("swipe_gestures", true)
     val pauseOnHeadphones = BoolPref("pause_on_headphones", true)
 
     // Audio
@@ -112,6 +180,7 @@ object Prefs {
 
     // Look
     val dynamicColor = BoolPref("dynamic_color", false)
+    val accent = IntPref("accent", 0)
 
     // Library
     val folderFilter = StringPref("folder_filter", "")

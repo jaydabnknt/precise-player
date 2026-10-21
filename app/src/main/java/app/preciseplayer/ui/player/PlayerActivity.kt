@@ -365,6 +365,10 @@ class PlayerActivity : ComponentActivity(), PlayerHost {
         startActivity(Intent(this, SettingsActivity::class.java))
     }
 
+    override fun customizeControls() {
+        startActivity(Intent(this, SettingsActivity::class.java).putExtra(SettingsActivity.EXTRA_PAGE, SettingsActivity.PAGE_CONTROLS))
+    }
+
     override fun pickSubtitle() {
         try { subtitlePicker.launch(arrayOf("*/*")) } catch (_: Exception) {}
     }

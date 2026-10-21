@@ -24,7 +24,8 @@ interface GestureCallbacks {
     fun onDoubleTap(zone: Int, repeat: Boolean)
     fun onLongPressStart()
     fun onLongPressEnd()
-    fun swipesEnabled(): Boolean
+    fun dragAllowed(kind: DragKind): Boolean
+    fun pinchAllowed(): Boolean
     fun onDragStart(kind: DragKind)
     /** [total] is the movement since the drag started, in px. */
     fun onDrag(kind: DragKind, total: Offset, size: IntSize)
@@ -72,7 +73,7 @@ fun Modifier.playerGestures(cb: GestureCallbacks): Modifier = pointerInput(cb) {
                 val ev = awaitPointerEvent()
                 val pressed = ev.changes.count { it.pressed }
 
-                if (!transforming && drag == null && !longPressed && pressed >= 2) {
+                if (!transforming && drag == null && !longPressed && pressed >= 2 && cb.pinchAllowed()) {
                     lpJob.cancel()
                     pendingTap?.cancel()
                     transforming = true
@@ -123,12 +124,13 @@ fun Modifier.playerGestures(cb: GestureCallbacks): Modifier = pointerInput(cb) {
                 total += c.position - c.previousPosition
                 if (drag == null && !longPressed && total.getDistance() > slop) {
                     lpJob.cancel()
-                    if (!fromEdge && cb.swipesEnabled()) {
-                        drag = when {
-                            abs(total.x) > abs(total.y) -> DragKind.SEEK
-                            down.position.x < w / 2 -> DragKind.BRIGHTNESS
-                            else -> DragKind.VOLUME
-                        }
+                    val kind = when {
+                        abs(total.x) > abs(total.y) -> DragKind.SEEK
+                        down.position.x < w / 2 -> DragKind.BRIGHTNESS
+                        else -> DragKind.VOLUME
+                    }
+                    if (!fromEdge && cb.dragAllowed(kind)) {
+                        drag = kind
                         pendingTap?.cancel()
                         cb.onDragStart(drag!!)
                     } else {

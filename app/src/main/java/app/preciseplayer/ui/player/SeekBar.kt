@@ -32,7 +32,10 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.graphics.Shape
+import app.preciseplayer.Prefs
 import app.preciseplayer.mpv.MpvCore
 import app.preciseplayer.mpv.Scrubber
 import kotlinx.coroutines.coroutineScope
@@ -54,20 +57,22 @@ fun PreciseSeekBar(
     ui: PlayerUiState,
     scrubber: Scrubber,
     modifier: Modifier = Modifier,
+    large: Boolean = false,
 ) {
     val pos by MpvCore.position.collectAsState()
     val shown = ui.scrubTarget ?: pos
     val dur by rememberUpdatedState(duration)
     val density = LocalDensity.current
     val active = ui.scrubTarget != null && ui.scrubSource == ScrubSource.BAR
-    val trackH by animateDpAsState(if (active) 8.dp else 4.dp, label = "track")
+    val trackH by animateDpAsState(
+        when { active && large -> 12.dp; active -> 8.dp; large -> 7.dp; else -> 4.dp }, label = "track")
     val primary = MaterialTheme.colorScheme.primary
     val fineSteps = with(density) { floatArrayOf(56.dp.toPx(), 120.dp.toPx(), 190.dp.toPx()) }
 
     Box(
         modifier
             .fillMaxWidth()
-            .height(36.dp)
+            .height(if (large) 48.dp else 36.dp)
             .pointerInput(Unit) {
                 awaitEachGesture {
                     val down = awaitFirstDown()
@@ -89,6 +94,7 @@ fun PreciseSeekBar(
                         lastX = c.position.x
                         val above = (-c.position.y).coerceAtLeast(0f)
                         val fine = when {
+                            !Prefs.fineScrub.value -> 1f
                             above < fineSteps[0] -> 1f
                             above < fineSteps[1] -> 0.5f
                             above < fineSteps[2] -> 0.25f
@@ -108,7 +114,7 @@ fun PreciseSeekBar(
             },
         contentAlignment = Alignment.Center,
     ) {
-        Canvas(Modifier.fillMaxWidth().height(24.dp)) {
+        Canvas(Modifier.fillMaxWidth().height(if (large) 32.dp else 24.dp)) {
             val w = size.width
             val cy = size.height / 2
             val th = trackH.toPx()
@@ -125,7 +131,8 @@ fun PreciseSeekBar(
             }
             val xp = x(shown)
             drawRoundRect(primary, Offset(0f, cy - th / 2), Size(xp, th), r)
-            drawCircle(primary, radius = if (active) 9.dp.toPx() else 7.dp.toPx(), center = Offset(xp, cy))
+            val r0 = if (large) 9.dp.toPx() else 7.dp.toPx()
+            drawCircle(primary, radius = if (active) r0 + 2.dp.toPx() else r0, center = Offset(xp, cy))
         }
     }
 }
@@ -134,19 +141,30 @@ fun PreciseSeekBar(
  * Jog strip: drag sideways to step frame by frame (one tick = one frame).
  */
 @Composable
-fun JogStrip(onSteps: (Int) -> Unit, onInteract: () -> Unit, modifier: Modifier = Modifier) {
+fun JogStrip(
+    onSteps: (Int) -> Unit,
+    onInteract: () -> Unit,
+    modifier: Modifier = Modifier,
+    height: Dp = 40.dp,
+    onActive: (Boolean) -> Unit = {},
+) {
+    val active by rememberUpdatedState(onActive)
     var offset by remember { mutableFloatStateOf(0f) }
-    val tickPx = with(LocalDensity.current) { 12.dp.toPx() }
+    val tickPx = with(LocalDensity.current) { Prefs.jogTickDp.value.coerceIn(4, 60).dp.toPx() }
     val step by rememberUpdatedState(onSteps)
     val primary = MaterialTheme.colorScheme.primary
     Canvas(
         modifier
-            .height(40.dp)
+            .height(height)
             .clip(MaterialTheme.shapes.medium)
             .background(Color.White.copy(alpha = 0.06f))
-            .pointerInput(Unit) {
+            .pointerInput(tickPx) {
                 var acc = 0f
-                detectHorizontalDragGestures(onDragEnd = { acc = 0f }, onDragCancel = { acc = 0f }) { change, dx ->
+                detectHorizontalDragGestures(
+                    onDragStart = { acc = 0f; active(true) },
+                    onDragEnd = { acc = 0f; active(false) },
+                    onDragCancel = { acc = 0f; active(false) },
+                ) { change, dx ->
                     change.consume()
                     onInteract()
                     offset += dx
@@ -183,14 +201,19 @@ fun JogStrip(onSteps: (Int) -> Unit, onInteract: () -> Unit, modifier: Modifier 
 
 /** A round button that fires once on press and keeps firing while held. */
 @Composable
-fun RepeatButton(onFire: () -> Unit, modifier: Modifier = Modifier, content: @Composable BoxScope.() -> Unit) {
+fun RepeatButton(
+    onFire: () -> Unit,
+    modifier: Modifier = Modifier,
+    shape: Shape = CircleShape,
+    background: Color = Color.Transparent,
+    content: @Composable BoxScope.() -> Unit,
+) {
     val fire by rememberUpdatedState(onFire)
     var pressed by remember { mutableStateOf(false) }
     Box(
         modifier
-            .size(48.dp)
-            .clip(CircleShape)
-            .background(if (pressed) Color.White.copy(alpha = 0.18f) else Color.Transparent)
+            .clip(shape)
+            .background(if (pressed) Color.White.copy(alpha = 0.24f) else background)
             .pointerInput(Unit) {
                 detectTapGestures(onPress = {
                     pressed = true

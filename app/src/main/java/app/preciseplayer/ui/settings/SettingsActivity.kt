@@ -5,6 +5,21 @@ import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material.icons.rounded.Check
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import app.preciseplayer.FrameRowSize
+import app.preciseplayer.ui.theme.Accents
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.clickable
@@ -76,13 +91,30 @@ class SettingsActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
-        setContent { PreciseTheme { SettingsScreen(onBack = ::finish) } }
+        val startPage = intent.getStringExtra(EXTRA_PAGE)
+        setContent {
+            PreciseTheme {
+                var page by rememberSaveable { mutableStateOf(startPage ?: PAGE_MAIN) }
+                if (page == PAGE_CONTROLS) {
+                    BackHandler { if (startPage == PAGE_CONTROLS) finish() else page = PAGE_MAIN }
+                    ControlsEditor(onBack = { if (startPage == PAGE_CONTROLS) finish() else page = PAGE_MAIN })
+                } else {
+                    SettingsScreen(onBack = ::finish, onCustomize = { page = PAGE_CONTROLS })
+                }
+            }
+        }
+    }
+
+    companion object {
+        const val EXTRA_PAGE = "page"
+        const val PAGE_MAIN = "main"
+        const val PAGE_CONTROLS = "controls"
     }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun SettingsScreen(onBack: () -> Unit) {
+fun SettingsScreen(onBack: () -> Unit, onCustomize: () -> Unit) {
     val ctx = LocalContext.current
     val scroll = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
     var dialog by remember { mutableStateOf<(@Composable () -> Unit)?>(null) }
@@ -100,6 +132,49 @@ fun SettingsScreen(onBack: () -> Unit) {
         },
     ) { pad ->
         LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(top = pad.calculateTopPadding(), bottom = pad.calculateBottomPadding() + 24.dp)) {
+            item { Header("Controls") }
+            item { Choice("Customize controls", "Add, remove, reorder and move buttons (top, centre, bottom)") { onCustomize() } }
+            item { Toggle("Frame-step row", "Previous / next frame buttons and the jog strip under the seek bar", Prefs.showFrameRow) }
+            item {
+                val labels = mapOf(FrameRowSize.AUTO to "Large in portrait, compact in landscape",
+                    FrameRowSize.NORMAL to "Always compact", FrameRowSize.LARGE to "Always large")
+                Choice("Frame-step row size", labels[Prefs.frameRowSize.value]!!) {
+                    dialog = { OptionsDialog("Frame-step row size", FrameRowSize.values().toList(), Prefs.frameRowSize.value, { labels[it]!! }, { Prefs.frameRowSize.value = it }) { dialog = null } }
+                }
+            }
+            item { Toggle("Show frame jog strip", "Drag sideways to step frame by frame; other controls hide while you drag", Prefs.showJog) }
+            item {
+                SliderItem("Jog sensitivity", "${Prefs.jogTickDp.value} dp of drag per frame",
+                    Prefs.jogTickDp.value.toFloat(), 4f..40f) { Prefs.jogTickDp.value = it.roundToInt() }
+            }
+            item {
+                SliderItem("Frames per step button press", "${Prefs.frameStepCount.value}",
+                    Prefs.frameStepCount.value.toFloat(), 1f..30f) { Prefs.frameStepCount.value = it.roundToInt() }
+            }
+            item {
+                val d = Prefs.hideDelayMs.value
+                SliderItem("Hide controls after", if (d == 0) "Never (tap to hide)" else String.format(Locale.US, "%.1f s", d / 1000.0),
+                    d.toFloat(), 0f..10000f) { Prefs.hideDelayMs.value = (it / 500).roundToInt() * 500 }
+            }
+            item {
+                SliderItem("Background shade behind controls", "${(Prefs.controlsDim.value * 100).roundToInt()}%",
+                    Prefs.controlsDim.value, 0f..1f) { Prefs.controlsDim.value = (it * 20).roundToInt() / 20f }
+            }
+            item { Toggle("Large seek bar", "Thicker bar and bigger touch area", Prefs.largeSeekBar) }
+            item { Toggle("Fine scrubbing", "Slide your finger up while dragging the seek bar for ½, ¼ and 1/10 speed", Prefs.fineScrub) }
+            item { Toggle("Big time display while scrubbing", null, Prefs.showScrubOverlay) }
+            item { Toggle("Show remaining time", "You can also tap the time in the player to switch", Prefs.showRemaining) }
+            item { Toggle("Show video title", null, Prefs.showTitle) }
+
+            item { Header("Gestures") }
+            item { Toggle("Swipe sideways to seek", null, Prefs.gestureSeek) }
+            item { Toggle("Swipe up/down on the right for volume", null, Prefs.gestureVolume) }
+            item { Toggle("Swipe up/down on the left for brightness", null, Prefs.gestureBrightness) }
+            item { Toggle("Double-tap sides to seek", null, Prefs.gestureDoubleTapSeek) }
+            item { Toggle("Double-tap middle to play / pause", null, Prefs.gestureDoubleTapPause) }
+            item { Toggle("Pinch to zoom", null, Prefs.gesturePinch) }
+            item { Toggle("Press and hold for fast playback", null, Prefs.gestureLongPress) }
+
             item { Header("Seeking") }
             item {
                 Choice("Double-tap to seek", Prefs.doubleTapSeek.value.label()) {
@@ -126,7 +201,6 @@ fun SettingsScreen(onBack: () -> Unit) {
                     Prefs.swipeSeekMsPerDp.value.toFloat(), 10f..500f) { Prefs.swipeSeekMsPerDp.value = (it / 10).roundToInt() * 10 }
             }
             item { Toggle("Strict frame stepping", "Turn on only if stepping skips frames (e.g. with deinterlacing). Makes seeking slower. $engineNote", Prefs.accurateFrameSteps) }
-            item { Toggle("Show frame jog strip", "Drag sideways under the seek bar to step frame by frame", Prefs.showJog) }
             item { Toggle("Show milliseconds", null, Prefs.showMilliseconds) }
             item { Toggle("Show frame number", null, Prefs.showFrameNumber) }
             item {
@@ -137,7 +211,7 @@ fun SettingsScreen(onBack: () -> Unit) {
 
             item { Header("Playback") }
             item { Toggle("Resume where you left off", null, Prefs.resume) }
-            item { Toggle("Gestures on the video", "Swipe sideways to seek, up/down for brightness (left) and volume (right)", Prefs.swipeGestures) }
+            item { Toggle("Remember playback speed", "Start new videos at the last speed you chose", Prefs.rememberSpeed) }
             item {
                 SliderItem("Press-and-hold speed", Format.speed(Prefs.longPressSpeed.value.toDouble()),
                     Prefs.longPressSpeed.value, 1.25f..4f) { Prefs.longPressSpeed.value = (it * 4).roundToInt() / 4f }
@@ -174,7 +248,10 @@ fun SettingsScreen(onBack: () -> Unit) {
             item { Toggle("Hardware decoding", "Faster and uses less battery. Turn off if a video shows glitches. $engineNote", Prefs.hardwareDecoding) }
             item { Toggle("Next-generation renderer (gpu-next)", "Better quality on recent phones. $engineNote", Prefs.gpuNext) }
             item { Toggle("Debanding", "Smooths colour banding in gradients. $engineNote", Prefs.deband) }
-            if (Build.VERSION.SDK_INT >= 31) item { Toggle("Use wallpaper colours", "Material You colours for the app", Prefs.dynamicColor) }
+
+            item { Header("Look") }
+            item { AccentPicker() }
+            if (Build.VERSION.SDK_INT >= 31) item { Toggle("Use wallpaper colours", "Material You colours instead of the accent above", Prefs.dynamicColor) }
 
             item { Header("Advanced") }
             item {
@@ -195,6 +272,26 @@ fun SettingsScreen(onBack: () -> Unit) {
         }
     }
     dialog?.invoke()
+}
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun AccentPicker() {
+    Column(Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 8.dp)) {
+        Text("Accent colour", style = MaterialTheme.typography.bodyLarge)
+        Spacer(Modifier.height(10.dp))
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            Accents.forEachIndexed { i, (name, color) ->
+                val selected = Prefs.accent.value == i
+                Box(
+                    Modifier.size(44.dp).clip(CircleShape).background(color)
+                        .border(if (selected) 3.dp else 0.dp, MaterialTheme.colorScheme.onSurface, CircleShape)
+                        .clickable { Prefs.accent.value = i },
+                    contentAlignment = Alignment.Center,
+                ) { if (selected) Icon(Icons.Rounded.Check, name, tint = Color(0xFF1A1A1A)) }
+            }
+        }
+    }
 }
 
 private val itemColors @Composable get() = ListItemDefaults.colors(containerColor = MaterialTheme.colorScheme.surface)

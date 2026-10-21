@@ -18,6 +18,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.Analytics
+import androidx.compose.material.icons.rounded.Dashboard
 import androidx.compose.material.icons.rounded.PhotoCamera
 import androidx.compose.material.icons.rounded.PictureInPictureAlt
 import androidx.compose.material.icons.rounded.Remove
@@ -88,7 +89,7 @@ fun Sheets(s: PlayerState, ui: PlayerUiState, host: PlayerHost) {
                 Sheet.SUBS -> TracksSheet(s, "sub", ui, host)
                 Sheet.SPEED -> SpeedSheet(s)
                 Sheet.VOLUME -> VolumeSheet(s)
-                Sheet.VIDEO -> VideoSheet(s)
+                Sheet.VIDEO -> VideoSheet(s, ui)
                 Sheet.MORE -> MoreSheet(s, ui, host)
             }
         }
@@ -153,6 +154,35 @@ private fun TracksSheet(s: PlayerState, type: String, ui: PlayerUiState, host: P
         onReset = { MpvCore.setDouble(prop, 0.0) },
         hint = "Steps of 50 ms",
     )
+    if (type == "sub") {
+        val scale = Prefs.subScale.value
+        StepperRow("Subtitle size", "${(scale * 100).roundToInt()}%",
+            onMinus = { setSubScale(scale - 0.1f) }, onPlus = { setSubScale(scale + 0.1f) },
+            onReset = { setSubScale(1f) }, hint = "Tap value to reset")
+        val pos = Prefs.subPos.value
+        StepperRow("Subtitle position", if (pos >= 100) "Bottom" else "${100 - pos}% up",
+            onMinus = { setSubPos(pos + 5) }, onPlus = { setSubPos(pos - 5) },
+            onReset = { setSubPos(100) }, hint = "Move subtitles up from the bottom")
+    }
+}
+
+private fun setSubScale(v: Float) {
+    val c = (Math.round(v.coerceIn(0.3f, 4f) * 10) / 10f)
+    Prefs.subScale.value = c
+    MpvCore.setDouble("sub-scale", c.toDouble())
+}
+
+private fun setSubPos(v: Int) {
+    val c = v.coerceIn(0, 150)
+    Prefs.subPos.value = c
+    MpvCore.setInt("sub-pos", c)
+}
+
+/** Speed chosen by the user (remembered if that setting is on). */
+private fun setUserSpeed(v: Double) {
+    val c = (v * 100).roundToInt() / 100.0
+    MpvCore.setSpeed(c)
+    if (Prefs.rememberSpeed.value) Prefs.lastSpeed.value = c.toFloat()
 }
 
 @Composable
@@ -177,19 +207,19 @@ private fun SpeedSheet(s: PlayerState) {
     LaunchedEffect(s.speed) { slider = s.speed.toFloat() }
     Slider(
         value = slider.coerceIn(0.1f, 4f),
-        onValueChange = { v -> slider = (v * 20).roundToInt() / 20f; MpvCore.setSpeed(slider.toDouble()) },
+        onValueChange = { v -> slider = (v * 20).roundToInt() / 20f; setUserSpeed(slider.toDouble()) },
         valueRange = 0.1f..4f,
         modifier = Modifier.padding(horizontal = 24.dp),
     )
     FlowRow(Modifier.padding(horizontal = 20.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         for (v in listOf(0.25, 0.5, 0.75, 1.0, 1.25, 1.5, 1.75, 2.0, 3.0, 4.0)) {
-            FilterChip(selected = s.speed == v, onClick = { MpvCore.setSpeed(v) }, label = { Text(Format.speed(v), style = Tabular) })
+            FilterChip(selected = s.speed == v, onClick = { setUserSpeed(v) }, label = { Text(Format.speed(v), style = Tabular) })
         }
     }
     StepperRow("Fine adjust", Format.speed(s.speed),
-        onMinus = { MpvCore.setSpeed(((s.speed - 0.01) * 100).roundToInt() / 100.0) },
-        onPlus = { MpvCore.setSpeed(((s.speed + 0.01) * 100).roundToInt() / 100.0) },
-        onReset = { MpvCore.setSpeed(1.0) }, hint = "Steps of 0.01× · tap value to reset")
+        onMinus = { setUserSpeed(((s.speed - 0.01) * 100).roundToInt() / 100.0) },
+        onPlus = { setUserSpeed(((s.speed + 0.01) * 100).roundToInt() / 100.0) },
+        onReset = { setUserSpeed(1.0) }, hint = "Steps of 0.01× · tap value to reset")
     Text(
         "Tip: press and hold the video to play at ${Format.speed(Prefs.longPressSpeed.value.toDouble())} while held.",
         style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -223,7 +253,7 @@ private fun VolumeSheet(s: PlayerState) {
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun VideoSheet(s: PlayerState) {
+private fun VideoSheet(s: PlayerState, ui: PlayerUiState) {
     SheetTitle("Video & picture")
     Text("Aspect ratio", style = MaterialTheme.typography.labelLarge, modifier = Modifier.padding(horizontal = 24.dp, vertical = 4.dp))
     FlowRow(Modifier.padding(horizontal = 20.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -233,13 +263,12 @@ private fun VideoSheet(s: PlayerState) {
             FilterChip(selected = selected, onClick = { MpvCore.setString("video-aspect-override", v) }, label = { Text(label) })
         }
     }
-    var fill by remember { mutableStateOf(false) }
     Row(Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
         Column(Modifier.weight(1f)) {
             Text("Fill screen", style = MaterialTheme.typography.bodyLarge)
             Text("Crops the edges instead of showing black bars", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
-        Switch(checked = fill, onCheckedChange = { fill = it; MpvCore.setDouble("panscan", if (it) 1.0 else 0.0) })
+        Switch(checked = ui.fill, onCheckedChange = { ui.setFill(it) })
     }
     HorizontalDivider(Modifier.padding(vertical = 8.dp))
     PictureSlider("Brightness", s.brightness, "brightness")
@@ -296,6 +325,7 @@ private fun MoreSheet(s: PlayerState, ui: PlayerUiState, host: PlayerHost) {
     item(Icons.Rounded.Tune, "Video & picture", "Aspect ratio, crop, brightness, contrast…") { ui.sheet = Sheet.VIDEO }
     item(Icons.Rounded.PictureInPictureAlt, "Picture-in-picture") { ui.sheet = null; host.enterPip() }
     item(Icons.Rounded.Analytics, "Playback statistics", "Show or hide mpv's live stats") { ui.sheet = null; MpvCore.toggleStats() }
+    item(Icons.Rounded.Dashboard, "Customize controls", "Add, remove and reorder buttons") { ui.sheet = null; host.customizeControls() }
     item(Icons.Rounded.Settings, "Settings") { ui.sheet = null; host.openSettings() }
 }
 
